@@ -10,7 +10,7 @@ A tool for checking if World of Warcraft add-ons have been updated on CurseForge
 * [Additional Files](#additional-files)
 
 ## General Information
-CurseForge.com, a popular website for hosting World of Warcraft add-ons made their API private, which means it is no longer possible to use third-party applications to directly update and install addons. They offer their own official client, but many users would prefer not to use for various reasons such as privacy concerns. This tool aims to provide an alternative. Although it cannot automatically download and install directly, it checks the add-ons that are installed locally against the website to see which ones need to be updated, and provides a link directly to the download page.
+CurseForge.com, a popular website for hosting World of Warcraft add-ons made their API private, which means it is no longer possible to use third-party applications to directly update and install add-ons. They offer their own official client, but many users would prefer not to use it for various reasons such as privacy concerns. This tool aims to provide an alternative. Although it cannot automatically download and install add-ons directly, it checks the add-ons that are installed locally against the website to see which ones need to be updated, and provides a link directly to the download page.
 
 ## Technologies Used
 - Selenium 4.3.0

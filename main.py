@@ -1,8 +1,11 @@
-# TODO: Implement different logging levels
+import logging
+import argparse
 import os
 import random
 import pandas as pd
 import sys
+import PySimpleGUI as sg
+import platform
 from datetime import timedelta, datetime
 from pathlib import Path
 from selenium import webdriver
@@ -12,11 +15,15 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
-CURSE_BASE_URL = "https://www.curseforge.com/wow/addons/"
-
+argument_parser = argparse.ArgumentParser()
+argument_parser.add_argument('-r', '--randomize', action='store_true', help='randomize modified time of local add-on '
+                                                                            'folders')
+argument_parser.add_argument('-l', '--log', type=str, help='set the logging level',
+                             choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default='INFO')
+args = argument_parser.parse_args()
 
 # Randomize the last updated field of the local AddOn folders, for testing purposes
-def randomize_updated():
+if args.randomize:
     max_time = datetime.now()
     min_time = (max_time + timedelta(days=-365))
     min_time, max_time = (int(min_time.timestamp()), int(max_time.timestamp()))
@@ -25,9 +32,17 @@ def randomize_updated():
             time = random.randrange(min_time, max_time)
             os.utime(os.path.join(root, name), (time, time))
 
+log_level = getattr(logging, args.log, None)
+if not isinstance(log_level, int):
+    raise ValueError('Invalid log level: %s' % args.log)
+
+logging.basicConfig(level=log_level, format='%(asctime)s - %(levelname)s: %(message)s', datefmt='%m/%d/%Y %H:%M:%S')
+
+CURSE_BASE_URL = "https://www.curseforge.com/wow/addons/"
+
 
 def get_last_updated(url):
-    print("Getting " + CURSE_BASE_URL + url)
+    logging.info("Getting " + CURSE_BASE_URL + url)
     date = None
     try:
         driver.get(CURSE_BASE_URL + url)
@@ -35,18 +50,15 @@ def get_last_updated(url):
         date = date.get_attribute("data-epoch")
         date = datetime.fromtimestamp(int(date))
     except NoSuchElementException:
-        print("Couldn't find update time")
+        logging.info("Couldn't find update time")
         pass
     except TimeoutException:
-        print("Connection timed out")
+        logging.info("Connection timed out")
         pass
     else:
-        print("Updated on " + str(date))
+        logging.info("Updated on " + str(date))
     return date
 
-
-if "--randomize" in sys.argv:
-    randomize_updated()
 
 # Get the information about known addons, namely which folders belong to which addon,
 # and what is each addon's CurseForge url suffix
@@ -55,8 +67,8 @@ addons_info = pd.read_csv("./addon_folders.csv")
 # Get the last modified time of each folder in the installed addon folder and store it in a DataFrame
 #
 # TODO: use the default installation folder of WoW
-# TODO: Check if it's a valid installation of WoW (.exe file exists, path to addons folder is correct)
-# TODO: If not, ask the user for the installation folder
+#   Check if it's a valid installation of WoW (.exe file exists, path to addons folder is correct)
+#   If not, ask the user for the installation folder
 
 addon_folder = Path("./AddOns")
 folders = []
@@ -91,4 +103,4 @@ options.add_argument('log-level=3')
 driver = webdriver.Chrome(options=options, service=Service(ChromeDriverManager().install()))
 local_addons["Last Modified Source"] = [get_last_updated(url) for url in local_addons['URL']]
 local_addons = local_addons[local_addons['Last Modified'] < local_addons["Last Modified Source"]]
-print(local_addons)
+logging.info(local_addons)

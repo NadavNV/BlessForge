@@ -3,7 +3,6 @@ import argparse
 import os
 import random
 import pandas as pd
-import sys
 import PySimpleGUI as sg
 import platform
 from datetime import timedelta, datetime
@@ -41,7 +40,23 @@ logging.basicConfig(level=log_level, format='%(asctime)s - %(levelname)s: %(mess
 CURSE_BASE_URL = "https://www.curseforge.com/wow/addons/"
 
 
-def get_last_updated(url):
+def check_curseforge(urls, window):
+    # For each addon, get the last modified time from CurseForge
+    options = Options()
+    options.headless = True
+    options.add_argument("--window-size=1920,1200")
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) /"
+                         "Chrome/102.0.5005.63 Safari/537.36")
+    options.add_argument('log-level=3')
+    driver = webdriver.Chrome(options=options, service=Service(ChromeDriverManager().install()))
+    result = []
+    for count, url in enumerate(urls):
+        result.append(get_last_updated(url, driver))
+        # TODO: update progress bar with count
+    return result
+    # local_addons["Last Modified Source"] = [get_last_updated(url, driver) for url in local_addons['URL']]
+
+def get_last_updated(url, driver):
     logging.info("Getting " + CURSE_BASE_URL + url)
     date = None
     try:
@@ -79,28 +94,30 @@ for folder in addon_folder.iterdir():
 
 local_addons = pd.DataFrame(data={
     "Folder": folders,
-    "Last Modified": last_modified
+    "Last Modified Local": last_modified
 })
 
 local_addons = local_addons.merge(addons_info, on="Folder")
+# local_addons.to_excel("./Local addons.xlsx")     # for testing
 pd.set_option('display.max_columns', None)
 local_addons.set_index(["Name", "Folder"], inplace=True)
 local_addons.sort_index()
-latest_folder_index = local_addons.groupby("Name")['Last Modified'].transform(max) == local_addons["Last Modified"]
+latest_folder_index = local_addons.groupby("Name")['Last Modified Local'].transform(max) == \
+                      local_addons["Last Modified Local"]
 # Leave only the most recently modified folder for each addon, because that was the last time the addon was updated
 local_addons = local_addons[latest_folder_index]
 # Folder information is not needed anymore
 local_addons = local_addons.droplevel('Folder')
 local_addons = local_addons.reset_index()
+# local_addons.to_excel("./Local addons filtered.xlsx")    # for testing
 
-# For each addon, get the last modified time from CurseForge
-options = Options()
-options.headless = True
-options.add_argument("--window-size=1920,1200")
-options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) /"
-                     "Chrome/102.0.5005.63 Safari/537.36")
-options.add_argument('log-level=3')
-driver = webdriver.Chrome(options=options, service=Service(ChromeDriverManager().install()))
-local_addons["Last Modified Source"] = [get_last_updated(url) for url in local_addons['URL']]
-local_addons = local_addons[local_addons['Last Modified'] < local_addons["Last Modified Source"]]
-logging.info(local_addons)
+initial_screen = [sg.Button(button_text="Check for updates", key="check_button", visible=True)]
+checking_screen = [sg.Column([[sg.Text("Checking add-on", key='checking_text', )]],
+                             key='checking_screen', visible=False)]
+# TODO: send local_addons['URL'] to check_curseforge
+
+local_addons = local_addons[local_addons['Last Modified Local'] < local_addons["Last Modified Source"]]
+# local_addons.to_excel("./Local addons that need update.xlsx")    # for testing
+
+if __name__ == "__main__":
+

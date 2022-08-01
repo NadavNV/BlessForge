@@ -14,12 +14,17 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, WebDriverException
 
 CURSE_BASE_URL = "https://www.curseforge.com/wow/addons/"
+LINK_FONT = ('Courier New', 11, 'underline italic')
+DEFAULT_FONT = ('Courier New', 11, 'normal')
+TIME_TO_WAIT = 30
+ERROR_MESSAGE = 'Error, try again'
 
 
-def check_curseforge(urls, gui, result_ref):
+def check_curseforge(urls, gui, result_ref, start_closing):
+    gui.write_event_value(key='-PROGRESS-', value=f'0 of {len(urls)}')
     # For each addon, get the last modified time from CurseForge
     options = Options()
     options.headless = True
@@ -27,16 +32,22 @@ def check_curseforge(urls, gui, result_ref):
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) /"
                          "Chrome/102.0.5005.63 Safari/537.36")
     options.add_argument('log-level=3')
-    driver = webdriver.Chrome(options=options, service=Service(ChromeDriverManager().install()))
-    for count, url in enumerate(urls):
-        result_ref.append(get_last_updated(url, driver))
-        gui.write_event_value(key='-PROGRESS-', value=count)
+    with webdriver.Chrome(options=options, service=Service(ChromeDriverManager().install())) as driver:
+        driver.set_page_load_timeout(TIME_TO_WAIT)
+        for count, url in enumerate(urls):
+            if start_closing.is_set():
+                break
+            gui.write_event_value(key='-PROGRESS-', value=f'{count + 1} of {len(urls)}')
+            try:
+                result_ref.append(get_last_updated(url, driver))
+            except WebDriverException:
+                result_ref.append(None)
+                continue
     gui.write_event_value('-THREAD-', '** DONE **')
 
 
 def get_last_updated(url, driver):
     logging.info("Getting " + CURSE_BASE_URL + url)
-    date = None
     try:
         driver.get(CURSE_BASE_URL + url)
         date = driver.find_element(By.TAG_NAME, 'abbr')
@@ -44,16 +55,16 @@ def get_last_updated(url, driver):
         date = datetime.fromtimestamp(int(date))
     except NoSuchElementException:
         logging.info("Couldn't find update time")
-        pass
+        return None
     except TimeoutException:
         logging.info("Connection timed out")
-        pass
+        return None
     else:
         logging.info("Updated on " + str(date))
-    return date
+        return date
 
 
-if __name__ == "__main__":
+def main():
     # print('name is __name__')
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-r', '--randomize', action='store_true',
@@ -82,7 +93,23 @@ if __name__ == "__main__":
     else:
         logging.debug('Not randomizing')
 
-    sg.theme('DarkAmber')
+    # sg.theme('DarkAmber')
+
+    """
+    install_folder = ''
+    
+    match platform.system():
+        case 'Windows':
+            install_folder = 'C:/Program Files/World of Warcraft/'
+        case 'Darwin': # Mac
+            install_folder = '/Applications/World of Warcraft'
+        case other:
+            sg.popup('World of Warcraft is not supported on this platform!')
+    
+    if install_folder == '':
+        exit()
+    print('Install folder: ' + install_folder)
+    """
 
     logging.debug('Reading addons CSV')
     # Get the information about known addons, namely which folders belong to which addon,
@@ -109,61 +136,96 @@ if __name__ == "__main__":
     })
 
     local_addons = local_addons.merge(addons_info, on="Folder")
-    # local_addons.to_excel("./Local addons.xlsx")     # for testing
     pd.set_option('display.max_columns', None)
     local_addons.set_index(["Name", "Folder"], inplace=True)
     local_addons.sort_index()
     latest_folder_index = local_addons.groupby("Name")['Last Modified Local'].transform(max) == \
-        local_addons["Last Modified Local"]
+                          local_addons["Last Modified Local"]
     # Leave only the most recently modified folder for each addon, because that was the last time the addon was updated
     local_addons = local_addons[latest_folder_index]
     # Folder information is not needed anymore
     local_addons = local_addons.droplevel('Folder')
     local_addons = local_addons.reset_index()
-    # local_addons.to_excel("./Local addons filtered.xlsx")    # for testing
 
-    layout = [[sg.Text("Checking add-ons", key='-TEXT-', visible=False)],
-              [sg.ProgressBar(max_value=len(local_addons.index), orientation='h', key='-PROGRESS-', visible=False)],
-              [sg.Table(values=[[]], key='-RESULT-', visible=False)],
-              [sg.Button(button_text="Check for updates", key="-CHECK-", visible=True)],
-              [sg.Button('Exit')]]
-    logging.debug('Creating window')
-    window = sg.Window(title='BlessForge', layout=layout, use_custom_titlebar=True)
-    logging.debug(type(window))
-    result = []
+    main_layout = [[sg.Text("Checking add-ons...", key='-TEXT-', visible=False, size=30, justification='center')],
+                   [sg.Text(key='-PROGRESS-', visible=False, size=30, justification='center')],
+                   [sg.Button(button_text="Check for updates (May take a while)", key="-CHECK-", visible=True)],
+                   [sg.Button('Exit')]]
+    logging.debug('Creating main window')
+    main_window = sg.Window(title='BlessForge', layout=main_layout, use_custom_titlebar=True, font=DEFAULT_FONT,
+                            enable_close_attempted_event=True, element_justification='center')
+    main_window.finalize()
+    main_window.write_event_value(key='-CHECK-', value='')
+    last_modified_source = []
 
-    #-----GUI event loop-----#
+    # -----GUI event loop-----#
+    start_closing = threading.Event()
+    scraping_thread = None
     logging.debug('Starting GUI loop')
     while True:
-        logging.debug('GUI top of loop')
-        event, values = window.read(timeout=300)
-        logging.debug('Event: ' + str(event))
-        if event in (sg.WIN_CLOSED, 'Exit'):
-            break
+        window, event, values = sg.read_all_windows(timeout=300)
+        if event != '__TIMEOUT__':
+            logging.debug('Window: ' + str(window))
+            logging.debug('Event: ' + str(event))
+            logging.debug('Values: ' + str(values))
+        if event in (sg.WIN_CLOSED, sg.WIN_CLOSE_ATTEMPTED_EVENT, 'Exit'):
+            if window == main_window:
+                if scraping_thread is None or not scraping_thread.is_alive():
+                    break
+                else:
+                    start_closing.set()
+                    main_window['-TEXT-'].update('Finishing up...')
+                    main_window['-PROGRESS-'].update(visible=False)
+            else:
+                window.close()
         # Start checking CurseForge for updates
         elif event == '-CHECK-':
-            result = []
-            window['-CHECK-'].update(visible = False)
-            window['-TEXT-'].update(visible = True)
-            window['-PROGRESS-'].update(visible = True)
-            threading.Thread(target=check_curseforge, args=(list(local_addons['URL']), window, result)).start()
+            last_modified_source = []
+            main_window['-CHECK-'].update(visible=False)
+            main_window['-TEXT-'].update(visible=True)
+            main_window['-PROGRESS-'].update(visible=True)
+            scraping_thread = threading.Thread(target=check_curseforge, args=(list(local_addons['URL']), main_window,
+                                                                              last_modified_source, start_closing))
+            scraping_thread.start()
+
         # Finished checking for updates, display results
         elif event == '-THREAD-':
-            # Create a copy so that local addons still represent the status on disk
-            addons_to_update = local_addons.copy()
-            addons_to_update["Last Modified Source"] = result
-            addons_to_update = addons_to_update[
-                addons_to_update['Last Modified Local'] < addons_to_update["Last Modified Source"]]
-            # addons_to_update.to_excel("./Local addons that need update.xlsx")    # for testing
-            window['-CHECK-'].update(visible = True)
-            window['-TEXT-'].update(visible = False)
-            window['-PROGRESS-'].update(visible = False)
-            table = [[sg.Text(name), sg.Text(text='Go to CurseForge', key=f'LINK {CURSE_BASE_URL + url}',
-                                             )] for name, url in zip(addons_to_update['Name'], addons_to_update['URL'])]
-            window['-RESULT-'].update(values=table)
+            if start_closing.is_set():  # No need to create a result if user is trying to close the app
+                break
+            else:
+                # Create a copy so that local addons still represent the status on disk
+                addons_to_update = local_addons.copy()
+                addons_to_update["Last Modified Source"] = last_modified_source
+                missing_data = addons_to_update[addons_to_update.isnull().any(axis=1)].index.to_series()
+                addons_to_update.loc[missing_data, "Last Modified Source"] = datetime.now()
+                addons_to_update.loc[missing_data, "URL"] = ERROR_MESSAGE
+                addons_to_update = addons_to_update[
+                    addons_to_update['Last Modified Local'] < addons_to_update["Last Modified Source"]]
+                main_window['-CHECK-'].update(visible=True)
+                main_window['-TEXT-'].update(visible=False)
+                main_window['-PROGRESS-'].update(visible=False)
+                addons_to_update_table = []
+                for name, url in zip(addons_to_update['Name'], addons_to_update['URL']):
+                    if url == ERROR_MESSAGE:
+                        addons_to_update_table.append([sg.Text(name, size=len(max(addons_to_update['Name'], key=len))),
+                                                       sg.Text(ERROR_MESSAGE)])
+                    else:
+                        addons_to_update_table.append([sg.Text(name, size=len(max(addons_to_update['Name'], key=len))),
+                                                       sg.Text('Go to CurseForge', key=f'LINK {CURSE_BASE_URL+url}',
+                                                               enable_events=True, font=LINK_FONT)])
+                sg.Window(title='Outdated AddOns', layout=[[sg.Column(layout=addons_to_update_table, scrollable=True,
+                                                                      vertical_scroll_only=True)]],
+                          finalize=True, use_custom_titlebar=True, enable_close_attempted_event=True)
         elif event.startswith('LINK '):
             url = event.split(' ')[1]
-            webbrowser.open(url)
+            webbrowser.open(url, new=2)
+        elif event == '-PROGRESS-':
+            main_window['-PROGRESS-'].update(value=values['-PROGRESS-'])
+            pass
 
     # User closed the window
-    window.close()
+    main_window.close()
+
+
+if __name__ == "__main__":
+    main()

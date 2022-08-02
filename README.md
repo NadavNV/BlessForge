@@ -30,7 +30,8 @@ Result:
 ![Result](./img/bless-result.png)  
 
 ## Setup and Usage
-Clone the repository and run blessforge.exe
+Download and run `blessforge.exe`. It will create a local file so you don't have to input your addon folder location every time, so I recommend not saving it on the desktop.
+
 
 ## Additional Files
 - AddOns.zip - An example add-ons folder I am using for testing

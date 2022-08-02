@@ -1,12 +1,11 @@
-# BlessForge - WIP
+# BlessForge
 A tool for checking if World of Warcraft add-ons have been updated on CurseForge.com using Selenium, Pandas, and PySimpleGUI.
 ## Table of Contents
 * [General Info](#general-information)
 * [Technologies Used](#technologies-used)
 * [Screenshots](#screenshots)
 * [Remaining Tasks](#remaining-tasks)
-* [Setup](#setup)
-* [Usage](#usage)
+* [Setup and Usage](#setup-and-usage)
 * [Additional Files](#additional-files)
 
 ## General Information
@@ -18,23 +17,20 @@ CurseForge.com, a popular website for hosting World of Warcraft add-ons made the
 - PySimpleGUI 4.60.2
  
 ## Screenshots
-_Currently this is just a sketch of what the tool is intended to look like, I will replace these with screenshots once the GUI is implemented_
 Initial screen:
+
 ![Initial screen](./img/bless-initial.png)
+
 While checking:
+
 ![While checking](./img/bless-checking.png)
+
 Result:
-![Result](./img/bless-result.png)
 
-## Remaining Tasks
-- Implement GUI
-- Handle locating and working with the World of Warcraft installation folder
+![Result](./img/bless-result.png)  
 
-## Setup
-Install the required packaegs listed in [technologies](#technologies-used) and clone this repository.
-
-## Usage
-Got to this repo's root directory and run ```python main.py```
+## Setup and Usage
+Clone the repository and run blessforge.exe
 
 ## Additional Files
 - AddOns.zip - An example add-ons folder I am using for testing

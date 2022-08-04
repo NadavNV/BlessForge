@@ -23,15 +23,15 @@ Not every add-on is supported currently because I have to add them manually to t
 ## Screenshots
 Initial screen:
 
-![Initial screen](./img/bless-initial.png)
+![Initial screen](./img/initial.png)
 
 While checking:
 
-![While checking](./img/bless-checking.png)
+![While checking](./img/checking.png)
 
 Result:
 
-![Result](./img/bless-result.png)  
+![Result](./img/result.png)  
 
 ## Setup and Usage
 Download `blessforge.exe` and `addon_folders.csv`, save them in the same fodler and run the exe.

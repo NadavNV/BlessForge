@@ -1,14 +1,12 @@
 import logging
 import argparse
-import os
-import random
 import pandas as pd
 import PySimpleGUI as sg
 import platform
 import threading
 import webbrowser
-from os import path
-from datetime import timedelta, datetime
+from os import path, walk
+from datetime import datetime, MINYEAR
 from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -22,6 +20,15 @@ LINK_FONT = ('Courier New', 11, 'underline italic')
 DEFAULT_FONT = ('Courier New', 11, 'normal')
 TIME_TO_WAIT = 30
 ERROR_MESSAGE = 'Error, try again'
+
+
+def most_recent_change_in_tree(root):
+    latest_modified_time = datetime(year=MINYEAR, month=1, day=1)
+    for root, dirs, files in walk(root):
+        for name in files + dirs:
+            latest_modified_time = max(latest_modified_time,
+                                       datetime.fromtimestamp(Path(root).joinpath(name).stat().st_mtime))
+    return latest_modified_time
 
 
 def check_curseforge(urls, gui, result_ref, start_closing):
@@ -66,9 +73,6 @@ def get_last_updated(url, driver):
 
 def main():
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument('-r', '--randomize', action='store_true',
-                                 help='randomize modified time of local add-on '
-                                      'folders')
     argument_parser.add_argument('-l', '--log', type=str.upper, help='set the logging level',
                                  choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default='INFO')
     args = argument_parser.parse_args()
@@ -113,24 +117,13 @@ def main():
 
     install_folder = Path(install_folder)
 
-    # Randomize the last updated field of the local AddOn folders, for testing purposes
-    if args.randomize:
-        logging.debug('Randomizing addon folders')
-        max_time = datetime.now()
-        min_time = (max_time + timedelta(days=-365))
-        min_time, max_time = (int(min_time.timestamp()), int(max_time.timestamp()))
-        for root, dirs, files in os.walk(install_folder, topdown=False):
-            for name in files + dirs:
-                time = random.randrange(min_time, max_time)
-                os.utime(os.path.join(root, name), (time, time))
-    else:
-        logging.debug('Not randomizing')
-
     folders = []
     last_modified = []
     for folder in install_folder.iterdir():
-        folders.append(folder.name)
-        last_modified.append(datetime.fromtimestamp(folder.stat().st_mtime))
+        if folder.is_dir():
+            folders.append(folder.name)
+            last_modified.append(max(datetime.fromtimestamp(folder.stat().st_mtime),
+                                     most_recent_change_in_tree(folder.absolute())))
 
     local_addons = pd.DataFrame(data={
         "Folder": folders,

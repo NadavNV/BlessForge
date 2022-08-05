@@ -208,6 +208,7 @@ def main():
                         addons_to_update_table.append([sg.Text(name, size=len(max(addons_to_update['Name'], key=len))),
                                                        sg.Text('Go to CurseForge', key=f'LINK {CURSE_BASE_URL+url}',
                                                                enable_events=True, font=LINK_FONT)])
+                addons_to_update_table.append([sg.Sizer(200, 200)])
                 sg.Window(title='Outdated AddOns', layout=[[sg.Column(layout=addons_to_update_table, scrollable=True,
                                                                       vertical_scroll_only=True)]],
                           finalize=True, enable_close_attempted_event=True)

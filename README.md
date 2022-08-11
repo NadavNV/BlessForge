@@ -34,7 +34,7 @@ Result:
 ![Result](./img/result.png)  
 
 ## Setup and Usage
-Download `blessforge.exe` and `addon_folders.csv`, save them in the same fodler and run the exe.
+Download `blessforge.exe`, and run the exe.
 
 ## Additional Files
 - AddOns.zip - An example add-ons folder I am using for testing
